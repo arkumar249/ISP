@@ -21,8 +21,10 @@ jobs:
     - name: Set up Python
       uses: actions/setup-python@v5
       with:
-        python-version: "3.10"
-        
+        python-version: "3.12.8"
+        # This caches your pip packages to speed up subsequent runs
+        cache: 'pip' 
+
     - name: Install system dependencies (Linux)
       if: runner.os == 'Linux'
       run: |
@@ -35,62 +37,43 @@ jobs:
         pip install pyinstaller wheel setuptools
         
         # Install Interviewee requirements
-        if [ -f "interviewee_side/requirements.txt" ]; then pip install -r interviewee_side/requirements.txt; fi
+        if [ -f "interviewee_side/requirements.txt" ]; then 
+          pip install -r interviewee_side/requirements.txt
+        fi
         
         # Install Interviewer requirements
-        if [ -f "interviewer_side/AIHiringAssistant/requirements.txt" ]; then pip install -r interviewer_side/AIHiringAssistant/requirements.txt; fi
+        if [ -f "interviewer_side/AIHiringAssistant/requirements.txt" ]; then 
+          pip install -r interviewer_side/AIHiringAssistant/requirements.txt
+        fi
       shell: bash
 
-    - name: Build Interviewee App
+    - name: Build Apps
       run: |
+        # Build Interviewee
         cd interviewee_side
         pyinstaller --name "IntervieweePortal" --windowed --noconfirm main.py
-      shell: bash
-
-    - name: Build Interviewer App
-      run: |
+        cd ..
+        
+        # Build Interviewer
         cd interviewer_side/AIHiringAssistant
         pyinstaller --name "InterviewerApp" --windowed --noconfirm main.py
       shell: bash
 
-    - name: Upload Interviewee Artifact (Windows)
-      if: runner.os == 'Windows'
-      uses: actions/upload-artifact@v4
-      with:
-        name: IntervieweePortal-Windows
-        path: interviewee_side/dist/IntervieweePortal
-
-    - name: Upload Interviewer Artifact (Windows)
-      if: runner.os == 'Windows'
-      uses: actions/upload-artifact@v4
-      with:
-        name: InterviewerApp-Windows
-        path: interviewer_side/AIHiringAssistant/dist/InterviewerApp
-
-    - name: Upload Interviewee Artifact (macOS)
+    # Helper step to handle macOS .app folders (GitHub Artifacts handle files better than folders)
+    - name: Zip macOS Apps
       if: runner.os == 'macOS'
-      uses: actions/upload-artifact@v4
-      with:
-        name: IntervieweePortal-Mac
-        path: interviewee_side/dist/IntervieweePortal.app
+      run: |
+        cd interviewee_side/dist
+        zip -r ../../IntervieweePortal-Mac.zip IntervieweePortal.app
+        cd ../../interviewer_side/AIHiringAssistant/dist
+        zip -r ../../../InterviewerApp-Mac.zip InterviewerApp.app
+      shell: bash
 
-    - name: Upload Interviewer Artifact (macOS)
-      if: runner.os == 'macOS'
+    - name: Upload Artifacts
       uses: actions/upload-artifact@v4
       with:
-        name: InterviewerApp-Mac
-        path: interviewer_side/AIHiringAssistant/dist/InterviewerApp.app
-
-    - name: Upload Interviewee Artifact (Linux)
-      if: runner.os == 'Linux'
-      uses: actions/upload-artifact@v4
-      with:
-        name: IntervieweePortal-Linux
-        path: interviewee_side/dist/IntervieweePortal
-
-    - name: Upload Interviewer Artifact (Linux)
-      if: runner.os == 'Linux'
-      uses: actions/upload-artifact@v4
-      with:
-        name: InterviewerApp-Linux
-        path: interviewer_side/AIHiringAssistant/dist/InterviewerApp
+        name: Apps-${{ matrix.os }}
+        path: |
+          interviewee_side/dist/IntervieweePortal
+          interviewer_side/AIHiringAssistant/dist/InterviewerApp
+          *.zip
