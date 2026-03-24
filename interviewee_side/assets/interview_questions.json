@@ -1,0 +1,19 @@
+{
+  "questions": [
+    {
+      "id": 1,
+      "text": "Tell us about your background and experience. What led you to apply for this position?",
+      "video_path": "./assets/question_1.mp4"
+    },
+    {
+      "id": 2,
+      "text": "Describe a challenging situation you faced at work and how you overcame it.",
+      "video_path": "./assets/question_2.mp4"
+    },
+    {
+      "id": 3,
+      "text": "Where do you see yourself in the next five years? What are your career goals?",
+      "video_path": "./assets/question_3.mp4"
+    }
+  ]
+}

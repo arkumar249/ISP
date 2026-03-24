@@ -1,0 +1,42 @@
+# Virtual environment
+venv/
+.venv/
+env/
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+dist/
+build/
+
+# Git
+.git/
+.gitignore
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS files
+Thumbs.db
+.DS_Store
+
+# User data (mounted as volume instead)
+user_data/
+shared_data/
+
+# Data outputs
+interviewer_side/AIHiringAssistant/data/output_logs/
+interviewer_side/AIHiringAssistant/data/videos/
+
+# Docker files (no need to copy into image)
+docker-compose.yml
+.dockerignore
+
+# Misc
+*.md
+!requirements.txt

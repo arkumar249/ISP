@@ -1,0 +1,16 @@
+# GUI Framework
+PyQt6
+
+# Computer Vision & Media Processing
+opencv-python
+mediapipe
+torch
+
+# Image & Data Handling
+Pillow
+numpy
+p
+
+# Machine Learning & Inference
+scikit-learn
+joblib

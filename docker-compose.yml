@@ -1,0 +1,54 @@
+# ==========================================================
+# AI Hiring Assistant – Docker Compose
+# ==========================================================
+# Usage:
+#   docker compose build                  Build both images
+#   docker compose up interviewee         Run candidate app
+#   docker compose up interviewer         Run recruiter app
+#
+# On Linux, allow X11 access first:
+#   xhost +local:docker
+#
+# On Windows, install VcXsrv and set DISPLAY:
+#   set DISPLAY=host.docker.internal:0.0
+# ==========================================================
+
+services:
+  # ── Interviewee (Candidate) App ──────────────────────────
+  interviewee:
+    build:
+      context: ./interviewee_side
+      dockerfile: Dockerfile
+    image: ai-hiring-interviewee:latest
+    container_name: ai-hiring-interviewee
+    environment:
+      - DISPLAY=${DISPLAY:-host.docker.internal:0.0}
+    volumes:
+      # X11 socket (Linux)
+      - /tmp/.X11-unix:/tmp/.X11-unix
+      # Shared session data between both sides
+      - ./shared_data:/app/user_data
+      # Video files for the interview
+      - ./interviewee_side/Data:/app/Data:ro
+    # Webcam passthrough (Linux only – remove on Windows)
+    devices:
+      - /dev/video0:/dev/video0
+    network_mode: host
+    stdin_open: true
+    tty: true
+
+  # ── Interviewer (Recruiter) App ──────────────────────────
+  interviewer:
+    build:
+      context: ./interviewer_side/AIHiringAssistant
+      dockerfile: Dockerfile
+    image: ai-hiring-interviewer:latest
+    container_name: ai-hiring-interviewer
+    environment:
+      - DISPLAY=${DISPLAY:-host.docker.internal:0.0}
+    volumes:
+      - /tmp/.X11-unix:/tmp/.X11-unix
+      - ./shared_data:/app/user_data
+    network_mode: host
+    stdin_open: true
+    tty: true

@@ -1,0 +1,16 @@
+# GUI Framework
+PyQt6>=6.4.0
+
+# Computer Vision & Media Processing
+opencv-python>=4.8.0
+mediapipe>=0.10.0
+
+# Image & Data Handling
+Pillow>=9.0.0
+numpy>=1.21.0
+pandas>=1.5.0
+
+# Machine Learning & Inference
+scikit-learn>=1.2.0
+joblib>=1.2.0
+torch>=2.0.0
