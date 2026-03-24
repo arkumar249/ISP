@@ -10,19 +10,23 @@ on:
 jobs:
   build:
     strategy:
+      fail-fast: false # Prevents one OS failure from cancelling the others
       matrix:
         os: [windows-latest, macos-latest, ubuntu-latest]
     
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 45 # Prevents the "Canceled" error by giving extra time for downloads
 
     steps:
-    - uses: actions/checkout@v4
+    - name: Checkout Code
+      uses: actions/checkout@v4
 
     - name: Set up Python
       uses: actions/setup-python@v5
       with:
-        python-version: "3.12.8"
-        # This caches your pip packages to speed up subsequent runs
+        # Using 3.12 (without .8) ensures it uses the pre-cached version on the runner.
+        # This fixes the extraction hang you experienced.
+        python-version: "3.12"
         cache: 'pip' 
 
     - name: Install system dependencies (Linux)
@@ -59,8 +63,8 @@ jobs:
         pyinstaller --name "InterviewerApp" --windowed --noconfirm main.py
       shell: bash
 
-    # Helper step to handle macOS .app folders (GitHub Artifacts handle files better than folders)
-    - name: Zip macOS Apps
+    # Special handling for macOS: Zipping .app folders preserves permissions
+    - name: Prepare macOS Artifacts
       if: runner.os == 'macOS'
       run: |
         cd interviewee_side/dist
@@ -69,11 +73,18 @@ jobs:
         zip -r ../../../InterviewerApp-Mac.zip InterviewerApp.app
       shell: bash
 
-    - name: Upload Artifacts
+    - name: Upload Interviewee Artifact
       uses: actions/upload-artifact@v4
       with:
-        name: Apps-${{ matrix.os }}
+        name: IntervieweePortal-${{ matrix.os }}
         path: |
           interviewee_side/dist/IntervieweePortal
+          IntervieweePortal-Mac.zip
+
+    - name: Upload Interviewer Artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: InterviewerApp-${{ matrix.os }}
+        path: |
           interviewer_side/AIHiringAssistant/dist/InterviewerApp
-          *.zip
+          InterviewerApp-Mac.zip
