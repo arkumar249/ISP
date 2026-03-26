@@ -1,13 +1,30 @@
 import os
 import csv
 import numpy as np
+import cv2  # You may need to run: pip install opencv-python
 from datetime import datetime
 
-def generate_hiring_dataset(num_sessions=50, duration_sec=61, fps=30):
-    total_frames = duration_sec * fps
-    base_dir = "data"
+def generate_hiring_dataset(video_path, num_sessions=50):
+    # --- New Logic: Calculate duration and FPS from video ---
+    if not os.path.exists(video_path):
+        print(f"Error: Video file '{video_path}' not found.")
+        return
+
+    cap = cv2.VideoCapture(video_path)
+    fps = cap.get(cv2.CAP_PROP_FPS)
+    frame_count = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
     
-    # Ensure the root data directory exists
+    if fps == 0 or frame_count == 0:
+        print("Error: Could not read video properties. Check file integrity.")
+        return
+        
+    duration_sec = frame_count / fps
+    total_frames = frame_count
+    cap.release()
+
+    print(f"Video detected: {duration_sec:.2f}s at {fps} FPS ({total_frames} total frames)")
+
+    base_dir = "data"
     if not os.path.exists(base_dir):
         os.makedirs(base_dir)
 
@@ -21,10 +38,8 @@ def generate_hiring_dataset(num_sessions=50, duration_sec=61, fps=30):
         
         # --- 1. Generate physio.csv ---
         csv_file_path = os.path.join(session_path, "physio.csv")
-        
         base_lms = np.random.uniform(100, 500, (68, 2))
 
-        # Generate OCEAN FIRST (IMPORTANT)
         ocean_scores = np.random.rand(5).astype(np.float32)
         O, C, E, A, N = ocean_scores
         
@@ -43,14 +58,12 @@ def generate_hiring_dataset(num_sessions=50, duration_sec=61, fps=30):
                     "timestamp": datetime.now().isoformat()
                 }
                 
-                # Landmarks (unchanged)
                 jitter = np.random.normal(0, 0.3, (68, 2))
                 current_lms = base_lms + jitter
                 for idx, (x, y) in enumerate(current_lms):
                     row[f"lm_{idx}_x"] = round(x, 2)
                     row[f"lm_{idx}_y"] = round(y, 2)
                 
-                # Personality-driven thermal signals
                 row["forehead"] = round(36.5 + 0.5*E + np.random.normal(0, 0.1), 3)
                 row["nose_tip"] = round(36.5 + 0.4*N + np.random.normal(0, 0.1), 3)
                 row["left_cheek"] = round(36.5 + 0.3*A + np.random.normal(0, 0.1), 3)
@@ -59,11 +72,13 @@ def generate_hiring_dataset(num_sessions=50, duration_sec=61, fps=30):
 
                 writer.writerow(row)
 
-        # --- 2. Generate questionnaire.npy (UNCHANGED) ---
+        # --- 2. Generate questionnaire.npy ---
         npy_file_path = os.path.join(session_path, "questionnaire.npy")
         np.save(npy_file_path, ocean_scores)
 
     print(f"Finished! Created {num_sessions} folders in '{base_dir}/'.")
 
 if __name__ == "__main__":
-    generate_hiring_dataset()
+    # Just put your video file path here
+    path_to_video = "interview_video.mp4" 
+    generate_hiring_dataset(video_path=path_to_video, num_sessions=5)
