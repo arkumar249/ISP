@@ -252,8 +252,11 @@ class SessionSelectionPage(QWidget):
         image_html = ""
         img_path = os.path.join(self.selected_session_path, "aligned_face.jpg")
         if os.path.exists(img_path):
-            img_uri = f"file://{img_path}"
-            image_html = f"<img src='{img_uri}' width='150' alt='Candidate'>"
+            # Convert Windows backslashes to forward slashes for HTML file URI
+            img_uri = img_path.replace("\\", "/")
+            if not img_uri.startswith("/"):
+                img_uri = "/" + img_uri
+            image_html = f"<img src='file://{img_uri}' width='150' alt='Candidate'>"
         else:
             image_html = f"<div style='color:#bdc3c7; padding:50px 0;'>No Image</div>"
             
