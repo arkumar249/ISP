@@ -23,3 +23,7 @@ def get_json_prediction(file_path):
             "status": "error",
             "message": str(e)
         }, indent=4)
+
+# Usage
+json_output = get_json_prediction("data/session_20/physio.csv")
+print(json_output)
