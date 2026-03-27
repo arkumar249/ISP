@@ -275,9 +275,12 @@ class AlignmentPage(QWidget):
                 self.instruction_card.setStyleSheet(f"color: {Theme.COLOR_DANGER}; font-size: 16px; font-weight: 700;")
                 self.rgb_frame_container.setStyleSheet(f"background-color: {Theme.COLOR_DANGER_BG}; border: 2px solid {Theme.COLOR_DANGER}; border-radius: 8px;")
 
-            if self.aligned_frames >= self.required_stable_frames:
+            # For video files, relax the stable frame requirement to ensure processing starts
+            current_required_frames = 1 if self.is_video_file else self.required_stable_frames
+
+            if self.aligned_frames >= current_required_frames or self.is_video_file:
                 self.face_ready = True
-                self.instruction_card.setText("Alignment Confirmed")
+                self.instruction_card.setText("Alignment Confirmed" if not self.is_video_file else "Processing Video...")
                 self.instruction_card.setStyleSheet(f"color: {Theme.COLOR_SUCCESS}; font-size: 16px; font-weight: 700;")
                 self.rgb_frame_container.setStyleSheet(f"background-color: {Theme.COLOR_SUCCESS_BG}; border: 2px solid {Theme.COLOR_SUCCESS}; border-radius: 8px;")
                 self.status_label.setText("Status: Ready")
@@ -348,8 +351,10 @@ class AlignmentPage(QWidget):
         if self.video_source and os.path.exists(self.video_source):
              session_path = os.path.dirname(self.video_source)
              print(f"Processing Complete. Transitioning to Results with session: {session_path}")
+             # Pass the CSV containing extracted thermal data features
+             csv_path = self.logger.file_path
              # Give a small delay or transition immediately
-             QTimer.singleShot(1000, lambda: self.main_window.go_to_ml_result_page(self.user_data, session_path))
+             QTimer.singleShot(1000, lambda: self.main_window.go_to_ml_result_page(self.user_data, session_path, csv_path))
         else:
             print("Error: Could not determine session path.")
 

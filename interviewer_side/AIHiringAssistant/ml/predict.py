@@ -1,9 +1,11 @@
+import os
 import joblib
 import numpy as np
-from features import extract_features
+from ml.features import extract_features
 
 def predict(csv_path):
-    model, y_mean, y_std = joblib.load("model.pkl")
+    model_path = os.path.join(os.path.dirname(__file__), "model.pkl")
+    model, y_mean, y_std = joblib.load(model_path)
 
     X = extract_features(csv_path)
 
@@ -24,6 +26,17 @@ def predict(csv_path):
 
     # Convert back to original scale
     pred = pred_norm * y_std + y_mean
+
+    # Scale predictions into 1-5 range:
+    # 1) Normalize to 0-1 using the training target range
+    pred_min = pred.min()
+    pred_max = pred.max()
+    if pred_max - pred_min > 0:
+        pred_01 = (pred - pred_min) / (pred_max - pred_min)
+    else:
+        pred_01 = np.full_like(pred, 0.5)
+    # 2) Map to 1-5
+    pred = 1.0 + pred_01 * 4.0
 
     traits = ["Openness", "Conscientiousness", "Extraversion", "Agreeableness", "Neuroticism"]
 

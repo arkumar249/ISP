@@ -37,8 +37,8 @@ class MainWindow(QMainWindow):
         self.alignment_page.set_session(user_data, video_path)
         self.stack.setCurrentWidget(self.alignment_page)
 
-    def go_to_ml_result_page(self, user_data, session_path):
-        self.ml_result_page.process_session(user_data, session_path)
+    def go_to_ml_result_page(self, user_data, session_path, csv_path=None):
+        self.ml_result_page.process_session(user_data, session_path, csv_path)
         self.stack.setCurrentWidget(self.ml_result_page)
 
 

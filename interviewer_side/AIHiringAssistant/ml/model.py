@@ -1,7 +1,7 @@
 import numpy as np
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import StandardScaler
-from sklearn.neural_network import MLPRegressor
+from sklearn.ensemble import RandomForestRegressor
 import joblib
 
 def train_model(X, Y):
@@ -12,19 +12,10 @@ def train_model(X, Y):
 
     model = Pipeline([
         ("scaler", StandardScaler()),
-        ("mlp", MLPRegressor(
-            hidden_layer_sizes=(8,),   # small network
-            activation="relu",
-            solver="adam",
-
-            alpha=0.1,                # strong regularization
-            learning_rate_init=0.001,
-
-            max_iter=2000,
-            early_stopping=True,
-            validation_fraction=0.2,
-
-            n_iter_no_change=40,
+        ("rf", RandomForestRegressor(
+            n_estimators=100,
+            max_depth=5,
+            min_samples_leaf=2,
             random_state=42
         ))
     ])

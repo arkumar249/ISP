@@ -1,6 +1,5 @@
 import os
 import json
-import random
 from PyQt6.QtWidgets import (
     QWidget, QLabel, QPushButton, QVBoxLayout, QHBoxLayout, 
     QProgressBar, QFrame, QGraphicsDropShadowEffect, QGridLayout, QScrollArea
@@ -9,6 +8,7 @@ from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QColor
 
 from ui.theme import Theme
+from ml.predict import predict
 
 class MlResultPage(QWidget):
     def __init__(self, main_window):
@@ -100,9 +100,10 @@ class MlResultPage(QWidget):
         scroll.setWidget(content_widget)
         main_layout.addWidget(scroll)
 
-    def process_session(self, user_data, session_path):
+    def process_session(self, user_data, session_path, csv_path=None):
         self.user_data = user_data
         self.session_path = session_path
+        self.csv_path = csv_path
         
         # Reset UI
         self.title.setText(f"Analysis for {user_data.get('name', 'Candidate')}")
@@ -116,9 +117,9 @@ class MlResultPage(QWidget):
                 item.widget().deleteLater()
 
         # Load data directly
-        self.load_assessment_scores()
+        self.load_assessment_scores(self.csv_path)
 
-    def load_assessment_scores(self):
+    def load_assessment_scores(self, csv_path):
         assessment_path = os.path.join(self.session_path, "assessment.json")
         
         if not os.path.exists(assessment_path):
@@ -134,7 +135,7 @@ class MlResultPage(QWidget):
                  self.display_error("No scores found in assessment.json")
                  return
                  
-            self.display_comparison(scores)
+            self.display_comparison(scores, csv_path)
             
         except Exception as e:
             self.display_error(f"Error reading assessment: {e}")
@@ -146,10 +147,24 @@ class MlResultPage(QWidget):
         err_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.results_layout.addWidget(err_label)
 
-    def display_comparison(self, actual_scores):
+    def display_comparison(self, actual_scores, csv_path):
         self.loading_label.setVisible(False)
         
         trait_order = ["Openness", "Conscientiousness", "Extraversion", "Agreeableness", "Neuroticism"]
+
+        # Run Real ML Prediction here
+        predictions = None
+        if csv_path and os.path.exists(csv_path):
+            try:
+                predictions = predict(csv_path)
+            except Exception as e:
+                print(f"Error running model prediction: {e}")
+        else:
+            print("Warning: Missing or invalid CSV path for predictions.")
+
+        if predictions is None:
+             self.display_error("Failed to generate AI predictions.")
+             return
 
         # Grid for comparison
         grid = QGridLayout()
@@ -165,28 +180,17 @@ class MlResultPage(QWidget):
         row = 1
         total_accuracy = 0.0
         
-        for trait in trait_order:
-            actual_val = actual_scores.get(trait, 0)
+        for i, trait in enumerate(trait_order):
+            actual_val = float(actual_scores.get(trait, 0))
             
-            # --- Generate Simulated Prediction ---
-            # Random error between 4% and 8%
-            sign = random.choice([-1, 1])
-            percent_error = random.uniform(0.21, 0.27) # 4% to 8%
-            
-            # Predicted = Actual +/- (Actual * error)
-            # Assuming actual is 1-5 scale, ensure we don't divide by zero if actual is 0
-            if actual_val == 0: actual_val = 0.1
-            
-            predicted_val = actual_val + (sign * (actual_val * percent_error))
+            # Use Real ML Prediction for this trait
+            predicted_val = float(predictions[i])
             
             # Clamp to 1-5
             predicted_val = max(1.0, min(5.0, predicted_val))
             
-            # Calculate Accuracy for this trait
-            # Accuracy = 1 - (|Pred - Actual| / Actual)
-            # Since we generated it with percent_error, it should be close to 1 - percent_error
-            # But clamping might skew it slightly, so recalculate based on final values
-            
+            # Calculate accuracy vs baseline actual
+            if actual_val == 0: actual_val = 0.1
             error_margin = abs(predicted_val - actual_val) / actual_val
             accuracy = max(0, 1.0 - error_margin)
             total_accuracy += accuracy
