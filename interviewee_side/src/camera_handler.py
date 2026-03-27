@@ -36,14 +36,14 @@ class CameraHandler:
     Provides face detection, frontal gaze verification, and video recording.
     """
     
-    def __init__(self, camera_index: int = 0):
+    def __init__(self, camera_index: int = 1):
         """
         Initialize the CameraHandler.
         
         Args:
             camera_index: Index of the camera to use (default 0 for primary webcam).
         """
-        self.camera_index = camera_index
+        self.camera_index = 1
         self.capture: Optional[cv2.VideoCapture] = None
         self.is_running = False
         self.is_recording = False
