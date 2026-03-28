@@ -271,8 +271,17 @@ class FaceAlignmentPage(QWidget):
         # Draw face guide
         frame = self._draw_face_guide(frame)
         
-        # Convert to QPixmap
-        rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+        # Convert to RGB for display — handle any channel format safely
+        if len(frame.shape) == 2:
+            # Grayscale frame
+            rgb = cv2.cvtColor(frame, cv2.COLOR_GRAY2RGB)
+        elif frame.shape[2] == 4:
+            rgb = cv2.cvtColor(frame, cv2.COLOR_BGRA2RGB)
+        elif frame.shape[2] == 1:
+            rgb = cv2.cvtColor(frame, cv2.COLOR_GRAY2RGB)
+        else:
+            rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+        
         h, w, ch = rgb.shape
         q_img = QImage(rgb.data, w, h, ch * w, QImage.Format.Format_RGB888)
         pixmap = QPixmap.fromImage(q_img).scaled(

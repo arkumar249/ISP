@@ -145,28 +145,34 @@ class AIHiringAssistant(QMainWindow):
     
     def _go_to_interview(self):
         """Navigate to interview page."""
-        self.face_alignment_page.stop() # Ensure alignment page stops its loop
+        try:
+            self.face_alignment_page.stop() # Ensure alignment page stops its loop
+            
+            import time
+            frame = None
+            for _ in range(10):
+                frame = self.camera_handler.get_frame()
+                if frame is not None:
+                    break
+                time.sleep(0.05)
+                
+            session_folder = self.data_manager.get_session_folder()
+            if frame is not None and session_folder:
+                image_path = session_folder / "aligned_face.jpg"
+                cv2.imwrite(str(image_path), frame)
+                
+            self.stack.setCurrentIndex(self.PAGE_INTERVIEW)
         
-        import time
-        frame = None
-        for _ in range(10):
-            frame = self.camera_handler.get_frame()
-            if frame is not None:
-                break
-            time.sleep(0.05)
-            
-        session_folder = self.data_manager.get_session_folder()
-        if frame is not None and session_folder:
-            image_path = session_folder / "aligned_face.jpg"
-            cv2.imwrite(str(image_path), frame)
-            
-        self.stack.setCurrentIndex(self.PAGE_INTERVIEW)
-    
-        # Start recording in background
-        video_save_path = self.data_manager.get_interview_path(question_id=1)
-        self.camera_handler.start_recording(video_save_path)
-    
-        self.interview_page.start()
+            # Start recording in background
+            video_save_path = self.data_manager.get_interview_path(question_id=1)
+            self.camera_handler.start_recording(video_save_path)
+        
+            self.interview_page.start()
+        except Exception as e:
+            import traceback
+            err_msg = traceback.format_exc()
+            QMessageBox.critical(self, "Crash Prevented", f"Error in _go_to_interview:\n{err_msg}")
+            print(err_msg)
     
     def _go_to_assessment(self):
         """Navigate to assessment page."""

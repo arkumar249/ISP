@@ -8,9 +8,12 @@ import cv2
 import numpy as np
 import threading
 import queue
+import logging
 from pathlib import Path
 from typing import Optional, Callable, Tuple
 from enum import Enum
+
+logger = logging.getLogger(__name__)
 
 try:
     import mediapipe as mp
@@ -36,7 +39,7 @@ class CameraHandler:
     Provides face detection, frontal gaze verification, and video recording.
     """
     
-    def __init__(self, camera_index: int = 0):
+    def __init__(self, camera_index: int = 1):
         """
         Initialize the CameraHandler.
         
@@ -154,6 +157,27 @@ class CameraHandler:
         if self.face_mesh:
             self.face_mesh.close()
     
+    @staticmethod
+    def _ensure_bgr(frame: np.ndarray) -> np.ndarray:
+        """
+        Normalize any frame to 3-channel BGR.
+        Handles grayscale (1-ch), BGRA (4-ch), and passthrough for BGR (3-ch).
+        """
+        if frame is None:
+            return frame
+        if len(frame.shape) == 2:
+            # Single-channel grayscale → BGR
+            return cv2.cvtColor(frame, cv2.COLOR_GRAY2BGR)
+        channels = frame.shape[2] if len(frame.shape) == 3 else 0
+        if channels == 1:
+            # Explicit single-channel → BGR
+            return cv2.cvtColor(frame, cv2.COLOR_GRAY2BGR)
+        elif channels == 4:
+            # BGRA → BGR
+            return cv2.cvtColor(frame, cv2.COLOR_BGRA2BGR)
+        # Already 3-channel (BGR) — pass through
+        return frame
+
     def _processing_loop(self):
         """Main processing loop running on separate thread."""
         while not self._stop_event.is_set():
@@ -164,21 +188,39 @@ class CameraHandler:
             if not ret:
                 continue
             
+            # Normalize frame to 3-channel BGR (thermal cameras may output grayscale)
+            frame = self._ensure_bgr(frame)
+            
             # Flip frame horizontally for mirror effect
             frame = cv2.flip(frame, 1)
             
-            # Detect face and check orientation
-            status = self._detect_face_status(frame)
+            # Detect face and check orientation (wrapped for safety)
+            try:
+                status = self._detect_face_status(frame)
+            except Exception as e:
+                logger.warning("Face detection error: %s", e)
+                status = FaceStatus.NO_FACE
             
             # Update status if changed
             if status != self._current_status:
                 self._current_status = status
                 if self._status_callback:
-                    self._status_callback(status)
+                    try:
+                        self._status_callback(status)
+                    except Exception as e:
+                        logger.warning("Status callback error: %s", e)
             
             # Write frame if recording
             if self.is_recording and self._video_writer:
-                self._video_writer.write(frame)
+                try:
+                    # VideoWriter crashes if frame dimensions don't exactly match initialization
+                    if hasattr(self, '_record_width') and hasattr(self, '_record_height'):
+                        record_frame = cv2.resize(frame, (self._record_width, self._record_height))
+                        self._video_writer.write(record_frame)
+                    else:
+                        self._video_writer.write(frame)
+                except Exception as e:
+                    logger.error(f"Recording error: {e}")
             
             # Put frame in queue for display (drop old frames)
             try:
@@ -311,24 +353,37 @@ class CameraHandler:
         
         if not self.is_running:
             return False
+            
+        # Get actual frame size from a real frame (camera props are often wrong for thermal)
+        frame = self.get_frame()
+        if frame is not None:
+            actual_h, actual_w = frame.shape[:2]
+        else:
+            actual_w, actual_h = self.frame_width, self.frame_height
+            
+        # Codecs require even dimensions
+        width = int(actual_w) if int(actual_w) % 2 == 0 else int(actual_w) - 1
+        height = int(actual_h) if int(actual_h) % 2 == 0 else int(actual_h) - 1
         
         # Ensure directory exists
         output_path.parent.mkdir(parents=True, exist_ok=True)
         
-        # Use XVID codec (widely compatible)
-        # Note: For true H.264, you may need to install opencv-python-headless with ffmpeg support
         fourcc = cv2.VideoWriter_fourcc(*'mp4v')
         
         self._video_writer = cv2.VideoWriter(
             str(output_path),
             fourcc,
             30.0,  # FPS
-            (self.frame_width, self.frame_height)
+            (width, height)
         )
         
         if not self._video_writer.isOpened():
             self._video_writer = None
             return False
+            
+        # Save exact recording dimensions to resize frames before writing
+        self._record_width = width
+        self._record_height = height
         
         self._record_path = output_path
         self.is_recording = True

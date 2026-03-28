@@ -279,15 +279,19 @@ class InterviewPage(QWidget):
     def start(self):
         """Initialize and prepare video."""
         # Look for video in Data folder
-        # TO (More robust):
         data_dir = Path(__file__).resolve().parents[2] / "Data"
-        # Try finding any mp4 file
-        video_files = list(data_dir.glob("*.mp4"))
+        
+        video_files = []
+        if data_dir.exists():
+            video_files = list(data_dir.glob("*.mp4"))
         
         if not video_files:
-            QMessageBox.warning(self, "Error", "No video file found in 'Data' folder.\nPlease add an MP4 file.")
+            QMessageBox.warning(self, "Warning", "No video file found in 'Data' folder.\nPlease add an MP4 file.")
             self.status_label.setText("Error: Video file not found")
             self.play_button.setEnabled(False)
+            
+            # Show finish button anyway so they can proceed without a video
+            self.finish_button.show()
             return
 
         self.video_path = video_files[0]

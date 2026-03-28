@@ -1,0 +1,4 @@
+Traceback (most recent call last):
+  File "C:\Users\HP\OneDrive\Documents\ISP Final\ISP\interviewee_side\run_debug.py", line 6, in <module>
+    from main import main
+ImportError: cannot import name 'main' from 'main' (C:\Users\HP\OneDrive\Documents\ISP Final\ISP\interviewee_side\main.py)
