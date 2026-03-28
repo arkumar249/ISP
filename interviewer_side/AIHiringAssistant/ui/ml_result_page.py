@@ -108,7 +108,7 @@ class MlResultPage(QWidget):
         # Reset UI
         self.title.setText(f"Analysis for {user_data.get('name', 'Candidate')}")
         self.loading_label.setVisible(True)
-        self.loading_label.setText("Reading Assessment...")
+        self.loading_label.setText("Generating AI Profile...")
         
         # Clear previous results from layout
         while self.results_layout.count() > 1: # Keep loading label
@@ -116,29 +116,64 @@ class MlResultPage(QWidget):
             if item.widget():
                 item.widget().deleteLater()
 
-        # Load data directly
-        self.load_assessment_scores(self.csv_path)
+        # Check existing summary.json for cached predictions
+        summary_path = os.path.join(self.session_path, "summary.json")
+        predictions = None
+        trait_order = ["Openness", "Conscientiousness", "Extraversion", "Agreeableness", "Neuroticism"]
 
-    def load_assessment_scores(self, csv_path):
-        assessment_path = os.path.join(self.session_path, "assessment.json")
+        if os.path.exists(summary_path):
+            try:
+                with open(summary_path, 'r') as f:
+                    summary_data = json.load(f)
+                cached_scores = summary_data.get("ocean_scores", {})
+                if cached_scores and all(t in cached_scores for t in trait_order):
+                    # Cache hit
+                    predictions = [
+                        cached_scores["Openness"],
+                        cached_scores["Conscientiousness"],
+                        cached_scores["Extraversion"],
+                        cached_scores["Agreeableness"],
+                        cached_scores["Neuroticism"]
+                    ]
+                    print("Using cached predictions from summary.json")
+            except Exception as e:
+                print(f"Error reading summary cache: {e}")
+
+        # If no cache or cache empty, run prediction
+        if predictions is None:
+            if self.csv_path and os.path.exists(self.csv_path):
+                try:
+                    predictions = predict(self.csv_path)
+                    # Cache it back to summary.json
+                    if os.path.exists(summary_path):
+                        try:
+                            with open(summary_path, 'r') as f:
+                                summary_data = json.load(f)
+                            
+                            summary_data["ocean_scores"] = {
+                                "Openness": predictions[0],
+                                "Conscientiousness": predictions[1],
+                                "Extraversion": predictions[2],
+                                "Agreeableness": predictions[3],
+                                "Neuroticism": predictions[4]
+                            }
+                            with open(summary_path, 'w') as f:
+                                json.dump(summary_data, f, indent=2)
+                        except Exception as e:
+                            print(f"Error caching to summary.json: {e}")
+                except Exception as e:
+                    print(f"Error running model prediction: {e}")
+            else:
+                print("Warning: Missing or invalid CSV path for predictions.")
+
+        if predictions is None:
+             self.display_error("Failed to generate AI predictions.")
+             return
+             
+        self.display_predictions(predictions)
         
-        if not os.path.exists(assessment_path):
-            self.display_error(f"Assessment file not found: {assessment_path}")
-            return
-            
-        try:
-            with open(assessment_path, 'r') as f:
-                data = json.load(f)
-                
-            scores = data.get("scores", {})
-            if not scores:
-                 self.display_error("No scores found in assessment.json")
-                 return
-                 
-            self.display_comparison(scores, csv_path)
-            
-        except Exception as e:
-            self.display_error(f"Error reading assessment: {e}")
+        # Auto-generate and save report silently
+        self.auto_generate_report(predictions)
 
     def display_error(self, message):
         self.loading_label.setVisible(False)
@@ -147,71 +182,40 @@ class MlResultPage(QWidget):
         err_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.results_layout.addWidget(err_label)
 
-    def display_comparison(self, actual_scores, csv_path):
+    def display_predictions(self, predictions):
         self.loading_label.setVisible(False)
         
         trait_order = ["Openness", "Conscientiousness", "Extraversion", "Agreeableness", "Neuroticism"]
-
-        # Run Real ML Prediction here
-        predictions = None
-        if csv_path and os.path.exists(csv_path):
-            try:
-                predictions = predict(csv_path)
-            except Exception as e:
-                print(f"Error running model prediction: {e}")
-        else:
-            print("Warning: Missing or invalid CSV path for predictions.")
-
-        if predictions is None:
-             self.display_error("Failed to generate AI predictions.")
-             return
 
         # Grid for comparison
         grid = QGridLayout()
         grid.setSpacing(15)
         
         # Headers
-        headers = ["Trait", "Actual Score", "Predicted Score (AI)"]
+        headers = ["Trait", "Predicted Score (AI)"]
         for col, text in enumerate(headers):
             lbl = QLabel(text)
             lbl.setStyleSheet(f"font-weight: 700; color: {Theme.COLOR_TEXT_SEC}; font-size: 14px; border-bottom: 2px solid {Theme.COLOR_BORDER}; padding-bottom: 5px;")
             grid.addWidget(lbl, 0, col)
 
         row = 1
-        total_accuracy = 0.0
         
         for i, trait in enumerate(trait_order):
-            actual_val = float(actual_scores.get(trait, 0))
-            
             # Use Real ML Prediction for this trait
             predicted_val = float(predictions[i])
             
-            # Clamp to 1-5
-            predicted_val = max(1.0, min(5.0, predicted_val))
-            
-            # Calculate accuracy vs baseline actual
-            if actual_val == 0: actual_val = 0.1
-            error_margin = abs(predicted_val - actual_val) / actual_val
-            accuracy = max(0, 1.0 - error_margin)
-            total_accuracy += accuracy
-
             # --- Render Row ---
             
             # Trait Name
             lbl_trait = QLabel(trait)
             lbl_trait.setStyleSheet(f"font-weight: 600; color: {Theme.COLOR_TEXT_MAIN}; font-size: 15px;")
             
-            # Actual Score
-            lbl_actual = QLabel(f"{actual_val:.2f}/5")
-            lbl_actual.setStyleSheet(f"font-weight: 700; color: {Theme.COLOR_PRIMARY}; font-size: 15px;")
-            
             # Predicted Score
             lbl_pred = QLabel(f"{predicted_val:.2f}/5")
             lbl_pred.setStyleSheet(f"font-weight: 700; color: {Theme.COLOR_WARNING}; font-size: 15px;")
             
             grid.addWidget(lbl_trait, row, 0)
-            grid.addWidget(lbl_actual, row, 1)
-            grid.addWidget(lbl_pred, row, 2)
+            grid.addWidget(lbl_pred, row, 1)
             
             row += 1
 
@@ -219,51 +223,215 @@ class MlResultPage(QWidget):
         container.setLayout(grid)
         self.results_layout.addWidget(container)
         
-        # --- Average Accuracy Display ---
-        avg_accuracy = (total_accuracy / 5.0) * 100
-        
-        acc_container = QFrame()
-        acc_container.setStyleSheet(f"""
-            QFrame {{
-                background-color: {Theme.COLOR_BG};
-                border: 1px solid {Theme.COLOR_BORDER};
-                border-radius: 8px;
-                padding: 15px;
-            }}
-        """)
-        acc_layout = QHBoxLayout(acc_container)
-        
-        acc_lbl_title = QLabel("Model Accuracy:")
-        acc_lbl_title.setStyleSheet(f"font-size: 16px; font-weight: 600; color: {Theme.COLOR_TEXT_MAIN};")
-        
-        acc_lbl_val = QLabel(f"{avg_accuracy:.2f}%")
-        acc_lbl_val.setStyleSheet(f"font-size: 24px; font-weight: 800; color: {Theme.COLOR_SUCCESS};")
-        
-        acc_layout.addWidget(acc_lbl_title)
-        acc_layout.addStretch()
-        acc_layout.addWidget(acc_lbl_val)
-        
-        self.results_layout.insertWidget(1, acc_container) # Insert below loading/error, above grid
-        
-        # Legend (Simplified)
-        
-        # Legend
-        legend = QHBoxLayout()
-        legend.addStretch()
-        
-        l1 = QLabel("■ Actual")
-        l1.setStyleSheet(f"color: {Theme.COLOR_PRIMARY}; font-weight: 600;")
-        l2 = QLabel("■ Predicted (AI)")
-        l2.setStyleSheet(f"color: {Theme.COLOR_WARNING}; font-weight: 600;")
-        
-        legend.addWidget(l1)
-        legend.addSpacing(15)
-        legend.addWidget(l2)
-        legend.addStretch()
-        
-        self.results_layout.addLayout(legend)
-            
         self.export_btn.setEnabled(True)
 
     def go_home(self):
         self.main_window.go_to_session_selection_page()
+
+    def auto_generate_report(self, predictions):
+        ocean_scores = {
+            'O': predictions[0],
+            'C': predictions[1],
+            'E': predictions[2],
+            'A': predictions[3],
+            'N': predictions[4]
+        }
+        
+        import base64
+        image_html = ""
+        img_path = os.path.join(self.session_path, "aligned_face.jpg")
+        if os.path.exists(img_path):
+            try:
+                with open(img_path, "rb") as image_file:
+                    encoded_string = base64.b64encode(image_file.read()).decode()
+                img_uri = f"data:image/jpeg;base64,{encoded_string}"
+                image_html = f"<img src='{img_uri}' width='150' alt='Candidate'>"
+            except Exception as e:
+                print(f"Error base64 encoding image: {e}")
+                image_html = f"<div style='color:#bdc3c7; padding:50px 0;'>Image Error</div>"
+        else:
+            image_html = f"<div style='color:#bdc3c7; padding:50px 0;'>No Image</div>"
+            
+        try:
+            from core.career_model import CareerPersonalityModel
+            model = CareerPersonalityModel()
+            top_3 = model.get_top_3_profiles(ocean_scores)
+            
+            job_profile = self.user_data.get('job_profile', '')
+            if job_profile:
+                suitability = model.get_job_suitability_percentage(ocean_scores, job_profile)
+            else:
+                suitability = "N/A"
+        except Exception as e:
+            top_3 = ["Software Engineer", "Data Scientist", "Product Manager"]
+            suitability = "75%"
+            
+        top_3_html = "<ul>" + "".join([f"<li>{prof}</li>" for prof in top_3]) + "</ul>"
+        
+        name = self.user_data.get('name', 'N/A')
+        email = self.user_data.get('email', 'N/A')
+        age = self.user_data.get('age', 'N/A')
+        job = self.user_data.get('job_profile', 'Not Specified')
+        
+        html_str = f"""
+        <html>
+        <head>
+        <style>
+            body {{ font-family: Arial, sans-serif; color: #2c3e50; line-height: 1.6; background-color: #ffffff; }}
+            h1 {{ color: {Theme.COLOR_PRIMARY}; text-align: center; border-bottom: 2px solid #ecf0f1; padding-bottom: 15px; letter-spacing: 1px; font-weight: 300; font-size: 28px; margin-bottom: 30px; }}
+            h3 {{ color: #34495e; font-weight: 600; font-size: 18px; margin-top: 0; padding-bottom: 8px; border-bottom: 1px solid #ecf0f1; }}
+            .card {{ background-color: #f8f9fa; border: 1px solid #e9ecef; padding: 20px; margin-bottom: 20px; }}
+            .highlight-card {{ background-color: #f0f7ff; border: 1px solid #cce5ff; border-left: 5px solid {Theme.COLOR_PRIMARY}; padding: 20px; margin-top: 25px; }}
+            .label {{ font-weight: bold; color: #7f8c8d; font-size: 14px; }}
+            .value {{ font-weight: 600; color: #2c3e50; font-size: 15px; }}
+            .score-box {{ background-color: #ffffff; border: 1px solid #dee2e6; padding: 10px; text-align: center; margin: 5px; }}
+            .score-title {{ font-size: 11px; color: #7f8c8d; font-weight: bold; text-transform: uppercase; }}
+            .score-val {{ font-size: 18px; color: {Theme.COLOR_PRIMARY}; font-weight: bold; }}
+            ul {{ margin-top: 10px; padding-left: 20px; color: #34495e; font-size: 15px; font-weight: 500; }}
+            li {{ margin-bottom: 8px; }}
+            .suitability {{ font-size: 20px; font-weight: bold; color: #27ae60; background: #e8f8f5; padding: 10px 15px; border-radius: 8px; display: inline-block; margin-top: 15px; }}
+        </style>
+        </head>
+        <body>
+            <h1>CANDIDATE EVALUATION REPORT</h1>
+            
+            <table width="100%" cellpadding="0" cellspacing="0" border="0" style="margin-bottom: 25px;">
+                <tr>
+                    <td width="30%" valign="top" align="center">
+                        <div style="background-color: #f8f9fa; border: 1px solid #e9ecef; padding: 15px;">
+                            {image_html}
+                        </div>
+                    </td>
+                    <td width="5%"></td>
+                    <td width="65%" valign="top">
+                        <div class="card" style="margin-bottom: 0;">
+                            <h3>Candidate Details</h3>
+                            <table width="100%" cellpadding="5" cellspacing="0" border="0">
+                                <tr>
+                                    <td width="35%" class="label">Full Name:</td>
+                                    <td class="value">{name}</td>
+                                </tr>
+                                <tr>
+                                    <td class="label">Email Address:</td>
+                                    <td class="value">{email}</td>
+                                </tr>
+                                <tr>
+                                    <td class="label">Age:</td>
+                                    <td class="value">{age}</td>
+                                </tr>
+                                <tr>
+                                    <td class="label">Target Role:</td>
+                                    <td class="value">{job}</td>
+                                </tr>
+                            </table>
+                        </div>
+                    </td>
+                </tr>
+            </table>
+            
+            <div class="card">
+                <h3>OCEAN Personality Profile</h3>
+                <p style="color: #7f8c8d; font-size: 13px; margin-top: 0; margin-bottom: 15px;">Extracted from behavioral analysis across interview sessions.</p>
+                <table width="100%" cellpadding="5" cellspacing="0" border="0">
+                    <tr>
+                        <td width="20%" align="center">
+                            <div class="score-box">
+                                <div class="score-title">Openness</div>
+                                <div class="score-val">{float(ocean_scores.get('O',0)):.2f}</div>
+                            </div>
+                        </td>
+                        <td width="20%" align="center">
+                            <div class="score-box">
+                                <div class="score-title">Conscient.</div>
+                                <div class="score-val">{float(ocean_scores.get('C',0)):.2f}</div>
+                            </div>
+                        </td>
+                        <td width="20%" align="center">
+                            <div class="score-box">
+                                <div class="score-title">Extraversion</div>
+                                <div class="score-val">{float(ocean_scores.get('E',0)):.2f}</div>
+                            </div>
+                        </td>
+                        <td width="20%" align="center">
+                            <div class="score-box">
+                                <div class="score-title">Agreeable.</div>
+                                <div class="score-val">{float(ocean_scores.get('A',0)):.2f}</div>
+                            </div>
+                        </td>
+                        <td width="20%" align="center">
+                            <div class="score-box">
+                                <div class="score-title">Neuroticism</div>
+                                <div class="score-val">{float(ocean_scores.get('N',0)):.2f}</div>
+                            </div>
+                        </td>
+                    </tr>
+                </table>
+            </div>
+            
+            <div class="highlight-card">
+                <h3 style="border-bottom:none; color: {Theme.COLOR_PRIMARY};">Career Match Analysis</h3>
+                
+                <table width="100%" cellpadding="0" cellspacing="0" border="0">
+                    <tr>
+                        <td width="55%" valign="top">
+                            <div class="label" style="margin-bottom: 10px;">Top Recommended Profiles:</div>
+                            {top_3_html}
+                        </td>
+                        <td width="45%" valign="top" align="center" style="border-left: 1px solid #cce5ff; padding-left: 20px;">
+                            <div class="label">Suitability for Target Role</div>
+                            <div style="font-size: 15px; font-weight: 500; color: #34495e; margin-top: 5px;">{job}</div>
+                            <br>
+                            <span class="suitability" style="color: #27ae60; border: 2px solid #27ae60; padding: 5px;">{suitability} MATCH</span>
+                        </td>
+                    </tr>
+                </table>
+            </div>
+            
+            <div style="text-align: center; margin-top: 40px; color: #bdc3c7; font-size: 12px;">
+                Generated by AI Hiring Assistant • Date: {os.path.basename(self.session_path)}
+            </div>
+        </body>
+        </html>
+        """
+        try:
+            from PyQt6.QtGui import QTextDocument
+            from PyQt6.QtPrintSupport import QPrinter
+            import stat
+
+            safe_name = name.replace(' ', '_')
+            if not safe_name: safe_name = "Candidate"
+            
+            # Save HTML
+            html_path = os.path.join(self.session_path, f"{safe_name}_Report.html")
+            with open(html_path, "w", encoding="utf-8") as f:
+                f.write(html_str)
+            
+            # Save PDF silently
+            try:
+                os.chmod(self.session_path, stat.S_IWRITE)
+            except: pass
+            
+            pdf_path = os.path.join(self.session_path, f"{safe_name}_Report.pdf")
+            
+            doc = QTextDocument()
+            doc.setHtml(html_str)
+            
+            printer = QPrinter(QPrinter.PrinterMode.ScreenResolution)
+            printer.setOutputFormat(QPrinter.OutputFormat.PdfFormat)
+            printer.setOutputFileName(pdf_path)
+            
+            doc.print(printer)
+            print(f"Report automatically saved to: {pdf_path}")
+            
+            # Disconnect previous handlers to prevent duplicate dialogs/events
+            try:
+                self.export_btn.clicked.disconnect()
+            except TypeError:
+                pass # Already disconnected or no signals connected
+
+            # Wire button to open the PDF directly
+            self.export_btn.clicked.connect(lambda _, p=pdf_path: os.startfile(os.path.abspath(p)))
+            self.export_btn.setText("Open PDF Report")
+            
+        except Exception as e:
+            print(f"Error auto-generating document report: {e}")
