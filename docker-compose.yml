@@ -1,54 +1,35 @@
-# ==========================================================
-# AI Hiring Assistant – Docker Compose
-# ==========================================================
-# Usage:
-#   docker compose build                  Build both images
-#   docker compose up interviewee         Run candidate app
-#   docker compose up interviewer         Run recruiter app
-#
-# On Linux, allow X11 access first:
-#   xhost +local:docker
-#
-# On Windows, install VcXsrv and set DISPLAY:
-#   set DISPLAY=host.docker.internal:0.0
-# ==========================================================
+version: '3.8'
 
 services:
-  # ── Interviewee (Candidate) App ──────────────────────────
-  interviewee:
+  interviewee_app:
     build:
       context: ./interviewee_side
       dockerfile: Dockerfile
-    image: ai-hiring-interviewee:latest
-    container_name: ai-hiring-interviewee
+    image: arkumar249/interviewee_app:latest
     environment:
-      - DISPLAY=${DISPLAY:-host.docker.internal:0.0}
+      # Passes the Host machines X-Server display coordinate to the container so GUI can launch
+      - DISPLAY=${DISPLAY}
+      - QT_QPA_PLATFORM=xcb
+      # Maps the internal python code to target this folder
+      - USER_DATA_DIR=/app/user_data
     volumes:
-      # X11 socket (Linux)
-      - /tmp/.X11-unix:/tmp/.X11-unix
-      # Shared session data between both sides
-      - ./shared_data:/app/user_data
-      # Video files for the interview
-      - ./interviewee_side/Data:/app/Data:ro
-    # Webcam passthrough (Linux only – remove on Windows)
+      # Mounts the X11 server socket for GUI capabilities
+      - /tmp/.X11-unix:/tmp/.X11-unix:rw
+      # Synchronizes all Interviewee output into the local 'shared_user_data' folder
+      - ./shared_user_data:/app/user_data
     devices:
-      - /dev/video0:/dev/video0
-    network_mode: host
-    stdin_open: true
-    tty: true
+      # Optional: Maps physical webcams into the container (primarily on Linux)
+      - /dev/video0:/dev/video0 
 
-  # ── Interviewer (Recruiter) App ──────────────────────────
-  interviewer:
+  interviewer_app:
     build:
       context: ./interviewer_side/AIHiringAssistant
       dockerfile: Dockerfile
-    image: ai-hiring-interviewer:latest
-    container_name: ai-hiring-interviewer
+    image: arkumar249/interviewer_app:latest
     environment:
-      - DISPLAY=${DISPLAY:-host.docker.internal:0.0}
+      - DISPLAY=${DISPLAY}
+      - QT_QPA_PLATFORM=xcb
     volumes:
-      - /tmp/.X11-unix:/tmp/.X11-unix
-      - ./shared_data:/app/user_data
-    network_mode: host
-    stdin_open: true
-    tty: true
+      - /tmp/.X11-unix:/tmp/.X11-unix:rw
+      # Synchronizes with the exact same 'shared_user_data' folder so the Interviewer immediately sees output
+      - ./shared_user_data:/app/user_data

@@ -8,9 +8,20 @@ import cv2
 import numpy as np
 import threading
 import queue
+import logging
+import sys
 from pathlib import Path
 from typing import Optional, Callable, Tuple
 from enum import Enum
+
+# File-based logging for PyInstaller debugging
+_log_path = Path(getattr(sys, '_MEIPASS', Path('.'))).parent / 'camera_debug.log'
+logging.basicConfig(
+    filename=str(_log_path),
+    level=logging.DEBUG,
+    format='%(asctime)s [%(levelname)s] %(message)s'
+)
+logger = logging.getLogger('CameraHandler')
 
 try:
     import mediapipe as mp
@@ -43,7 +54,7 @@ class CameraHandler:
         Args:
             camera_index: Index of the camera to use (default 0 for primary webcam).
         """
-        self.camera_index = 0
+        self.camera_index = 1
         self.capture: Optional[cv2.VideoCapture] = None
         self.is_running = False
         self.is_recording = False
@@ -102,14 +113,18 @@ class CameraHandler:
             return True
         
         # Initialize camera
+        logger.info(f"Attempting to open camera index {self.camera_index} with DirectShow")
         self.capture = cv2.VideoCapture(self.camera_index, cv2.CAP_DSHOW)
         
         if not self.capture.isOpened():
-            # Try without DirectShow
+            logger.warning("DirectShow failed, trying default backend")
             self.capture = cv2.VideoCapture(self.camera_index)
         
         if not self.capture.isOpened():
+            logger.error("Camera failed to open")
             return False
+        
+        logger.info("Camera opened successfully")
         
         # Set camera properties
         self.capture.set(cv2.CAP_PROP_FRAME_WIDTH, self.frame_width)
@@ -156,19 +171,38 @@ class CameraHandler:
     
     def _processing_loop(self):
         """Main processing loop running on separate thread."""
+        logger.info("Processing loop started")
+        frame_count = 0
         while not self._stop_event.is_set():
-            if self.capture is None or not self.capture.isOpened():
-                break
-            
-            ret, frame = self.capture.read()
-            if not ret:
+            try:
+                if self.capture is None or not self.capture.isOpened():
+                    logger.error("Camera capture is None or closed, exiting loop")
+                    break
+                
+                ret, frame = self.capture.read()
+                if not ret or frame is None:
+                    if frame_count == 0:
+                        logger.warning("First read() failed, possible backend issue")
+                    continue
+                
+                frame_count += 1
+                if frame_count <= 3:
+                    logger.info(f"Frame {frame_count} read: shape={frame.shape}")
+                
+                # Flip frame horizontally for mirror effect
+                frame = cv2.flip(frame, 1)
+                
+                try:
+                    # Detect face and check orientation
+                    status = self._detect_face_status(frame)
+                except Exception as e:
+                    logger.warning(f"Face detection crash: {e}, falling back to cascade")
+                    # Fallback to Haar Cascade if ML model crashes in PyInstaller
+                    self.face_mesh = None
+                    status = self._detect_with_cascade(frame)
+            except Exception as loop_error:
+                logger.error(f"Processing loop error: {loop_error}")
                 continue
-            
-            # Flip frame horizontally for mirror effect
-            frame = cv2.flip(frame, 1)
-            
-            # Detect face and check orientation
-            status = self._detect_face_status(frame)
             
             # Update status if changed
             if status != self._current_status:

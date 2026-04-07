@@ -11,6 +11,7 @@ from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QColor
 from ui.theme import Theme
 from core.career_model import CareerPersonalityModel
+from cloud_sync import sync_sessions_from_cloud
 
 class SessionSelectionPage(QWidget):
     def __init__(self, main_window):
@@ -127,10 +128,27 @@ class SessionSelectionPage(QWidget):
         self.refresh_btn.setStyleSheet(Theme.button_secondary())
         self.refresh_btn.clicked.connect(self.load_sessions)
         
+        self.cloud_sync_btn = QPushButton("⟳ Sync from Cloud")
+        self.cloud_sync_btn.setFixedHeight(50)
+        self.cloud_sync_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.cloud_sync_btn.setStyleSheet("""
+            QPushButton {
+                background: rgba(0, 212, 255, 0.1);
+                color: #00d4ff;
+                border: 1px solid #00d4ff;
+                border-radius: 8px;
+                font-size: 14px;
+                font-weight: 500;
+            }
+            QPushButton:hover { background: rgba(0, 212, 255, 0.2); }
+        """)
+        self.cloud_sync_btn.clicked.connect(self.sync_cloud_sessions)
+        
         right_layout.addWidget(details_header)
         right_layout.addWidget(self.details_frame, 2)
         right_layout.addSpacing(10)
         right_layout.addWidget(self.report_btn)
+        right_layout.addWidget(self.cloud_sync_btn)
         right_layout.addWidget(self.refresh_btn)
         right_layout.addWidget(self.process_btn)
         
@@ -142,6 +160,23 @@ class SessionSelectionPage(QWidget):
         layout.addWidget(splitter)
         
         self.load_sessions()
+
+    def sync_cloud_sessions(self):
+        """Downloads new candidate sessions from Supabase and refreshes the list."""
+        self.cloud_sync_btn.setText("Syncing...")
+        self.cloud_sync_btn.setEnabled(False)
+        self.main_window.repaint() # Force UI refresh
+        
+        new_sessions = sync_sessions_from_cloud()
+        
+        self.cloud_sync_btn.setText("⟳ Sync from Cloud")
+        self.cloud_sync_btn.setEnabled(True)
+        
+        if new_sessions > 0:
+            QMessageBox.information(self, "Sync Complete", f"Successfully downloaded {new_sessions} new candidate sessions from the cloud.")
+            self.load_sessions()
+        else:
+            QMessageBox.information(self, "Up to date", "No new candidate sessions found in the cloud.")
 
     def load_sessions(self):
         self.session_list.clear()

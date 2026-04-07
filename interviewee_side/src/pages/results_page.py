@@ -7,10 +7,11 @@ Aesthetic: Neo-Corporate Futurism
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, 
     QPushButton, QFrame, QScrollArea, QTextBrowser,
-    QGraphicsDropShadowEffect, QGridLayout
+    QGraphicsDropShadowEffect, QGridLayout, QLineEdit, QMessageBox
 )
 from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtGui import QFont, QColor, QPainter, QLinearGradient
+from src.network_client import send_session_to_cloud
 
 
 class SuccessBadge(QWidget):
@@ -155,6 +156,43 @@ class ResultsPage(QWidget):
         cards_row.addStretch()
         
         content_layout.addLayout(cards_row)
+
+        # --- CLOUD TRANSFER MODULE ---
+        transfer_card = InfoCard("Secure Cloud Transfer")
+        transfer_layout = QVBoxLayout(transfer_card)
+        transfer_layout.setContentsMargins(25, 25, 25, 25)
+        transfer_layout.setSpacing(16)
+        
+        transfer_title = QLabel("☁️ Submit Official Assessment")
+        transfer_title.setFont(QFont("Segoe UI", 16, QFont.Weight.DemiBold))
+        transfer_title.setStyleSheet("color: #f8f9fa;")
+        transfer_layout.addWidget(transfer_title)
+        
+        transfer_desc = QLabel("Your interview is complete. Click the button below to securely encrypt and upload your session to the organization's cloud storage.")
+        transfer_desc.setStyleSheet("color: #adb5bd; font-size: 14px; line-height: 1.5;")
+        transfer_desc.setWordWrap(True)
+        transfer_layout.addWidget(transfer_desc)
+        
+        self.upload_btn = QPushButton("Securely Submit to Cloud")
+        self.upload_btn.setFixedHeight(45)
+        self.upload_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.upload_btn.setStyleSheet("""
+            QPushButton {
+                background: rgba(0, 212, 255, 0.1);
+                color: #00d4ff;
+                border: 1px solid #00d4ff;
+                border-radius: 8px;
+                font-size: 14px;
+                font-weight: 500;
+            }
+            QPushButton:hover {
+                background: rgba(0, 212, 255, 0.2);
+            }
+        """)
+        self.upload_btn.clicked.connect(self._on_upload)
+        transfer_layout.addWidget(self.upload_btn)
+        
+        content_layout.addWidget(transfer_card)
         
         # Action buttons
         button_container = QWidget()
@@ -198,6 +236,7 @@ class ResultsPage(QWidget):
     
     def set_data(self, registration: dict, session_folder: str):
         """Populate the results page with data."""
+        self.session_folder = session_folder
         # Personal info
         info_text = f"""
 <b>Name:</b> {registration.get('name', 'N/A')}<br>
@@ -208,6 +247,28 @@ class ResultsPage(QWidget):
         """
         self.info_content.setText(info_text)
     
+    def _on_upload(self):
+        """Handle the secure cloud upload action."""
+        if not hasattr(self, 'session_folder') or not self.session_folder:
+            QMessageBox.critical(self, "Error", "Session data not found. Cannot upload.")
+            return
+            
+        self.upload_btn.setText("Uploading...")
+        self.upload_btn.setEnabled(False)
+        self.repaint() # Force UI update before blocking network call
+        
+        success, msg = send_session_to_cloud(self.session_folder)
+        
+        self.upload_btn.setEnabled(True)
+        self.upload_btn.setText("Upload Session")
+        
+        if success:
+            QMessageBox.information(self, "Success", msg)
+            self.upload_btn.setText("Uploaded ✓")
+            self.upload_btn.setEnabled(False)
+        else:
+            QMessageBox.critical(self, "Upload Failed", msg)
+
     def _on_restart(self):
         self.restart_clicked.emit()
     

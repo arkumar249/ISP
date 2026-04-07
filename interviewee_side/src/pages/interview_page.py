@@ -5,6 +5,7 @@ Aesthetic: Neo-Corporate Futurism
 """
 
 import os
+import sys
 from pathlib import Path
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, 
@@ -278,14 +279,34 @@ class InterviewPage(QWidget):
     
     def start(self):
         """Initialize and prepare video."""
-        # Look for video in Data folder
-        # TO (More robust):
-        data_dir = Path(__file__).resolve().parents[2] / "Data"
-        # Try finding any mp4 file
-        video_files = list(data_dir.glob("*.mp4"))
+        # Look for video in multiple possible locations (PyInstaller + development)
+        candidate_dirs = []
+        
+        # 1. PyInstaller bundled path (_MEIPASS/data)
+        if getattr(sys, 'frozen', False):
+            bundle_dir = Path(sys._MEIPASS)
+            candidate_dirs.append(bundle_dir / "data")
+            candidate_dirs.append(bundle_dir / "Data")
+            # Also check next to the exe
+            exe_dir = Path(sys.executable).parent
+            candidate_dirs.append(exe_dir / "data")
+            candidate_dirs.append(exe_dir / "Data")
+        
+        # 2. Development mode paths
+        candidate_dirs.append(Path(__file__).resolve().parents[2] / "data")
+        candidate_dirs.append(Path(__file__).resolve().parents[2] / "Data")
+        candidate_dirs.append(Path.cwd() / "data")
+        candidate_dirs.append(Path.cwd() / "Data")
+        
+        video_files = []
+        for d in candidate_dirs:
+            if d.exists():
+                video_files = list(d.glob("*.mp4"))
+                if video_files:
+                    break
         
         if not video_files:
-            QMessageBox.warning(self, "Error", "No video file found in 'Data' folder.\nPlease add an MP4 file.")
+            QMessageBox.warning(self, "Error", "No video file found in 'data' folder.\nPlease add an MP4 file.")
             self.status_label.setText("Error: Video file not found")
             self.play_button.setEnabled(False)
             return
